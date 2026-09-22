@@ -13,12 +13,24 @@ Two ways to run it, sharing the same tool implementation (`lib/`):
 |---|---|
 | `list_spaces` | List the spaces in the workspace |
 | `search` | Full-text search across pages, optionally scoped to one space |
-| `get_page` | Fetch a page and its content by id or slugId |
+| `get_page` | Fetch a page and its content (as markdown) by id or slugId |
 | `recent_pages` | List recently changed pages |
-| `create_page` | Create a page (markdown, html or json) |
+| `create_page` | Create a page, optionally with a body (markdown or html) |
 | `update_page` | Update a page's title and/or body |
 | `move_page` | Move a page under a different parent |
 | `delete_page` | Delete a page (trash or permanent) |
+
+### A note on page bodies
+
+Docmost's REST `/pages/create` and `/pages/update` accept a `content` field but silently ignore it — the page body lives in a Yjs collaboration document (CRDT, synced over a Hocuspocus WebSocket), not in the row those endpoints touch. This is a known, unresolved limitation of Docmost itself ([docmost/docmost#980](https://github.com/docmost/docmost/discussions/980), [#133](https://github.com/docmost/docmost/issues/133)), not something specific to this server.
+
+To actually read and write bodies, this server instead:
+
+- **Reads** via `/pages/export` (the endpoint the UI's "export" feature uses), not `/pages/info`.
+- **Creates with content** via `/pages/import`, which runs Docmost's own markdown/html → Yjs converter and persists the result directly. Fast (no extra latency).
+- **Updates content on an existing page** by writing straight to its Yjs document over the collaboration WebSocket: the new content is imported into a throwaway temporary page (to get Docmost's own converter output), cloned into the target page's document, and the temp page is deleted. The server debounces persistence by ~10s (up to 45s worst case), so `update_page` with a `content` change takes **~12 seconds** to return.
+
+See `lib/collab.js` for the implementation details.
 
 ## Local setup (Claude Desktop)
 
@@ -95,7 +107,10 @@ Then open `http://localhost:3000/setup`.
 ## Project structure
 
 ```
-lib/                 Shared Docmost REST client + MCP tool definitions
+lib/
+  docmost-client.js  REST client (spaces, search, pages, import, export, collab token)
+  collab.js          Yjs/Hocuspocus WebSocket client — the only way to write an existing page's body
+  tools.js           MCP tool definitions, shared by both servers
 server.js            Local stdio MCP server (Claude Desktop)
 remote/
   index.js           Express app: /setup form, /mcp/:token endpoint
