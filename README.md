@@ -102,5 +102,5 @@ remote/
   crypto.js           AES-256-GCM encrypt/decrypt for stored credentials
   redis.js            Tenant storage
   setup-page.js        HTML for the self-service onboarding form
-Dockerfile, docker-compose.yml   Container build + local Redis for the remote server
+Dockerfile, docker-compose.yaml   Container build + local Redis for the remote server
 ```
